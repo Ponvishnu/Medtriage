@@ -1,0 +1,115 @@
+name: medtriage-env
+version: "1.0.0"
+description: >
+  Emergency Department Clinical Triage and Decision Support Environment.
+  An AI agent acts as a clinical triage nurse making real-time decisions
+  about patient acuity (ESI levels), diagnostic workup, and resource allocation
+  during a mass-casualty surge.  Grounded in ESI v4 guidelines and validated
+  clinical protocols.
+
+author: "MedTriageEnv — OpenEnv Submission"
+license: "MIT"
+
+tags:
+  - healthcare
+  - clinical-decision-support
+  - triage
+  - real-world
+  - openenv
+  - emergency-medicine
+
+tasks:
+  - id: task_1
+    name: "Single-Patient Triage"
+    description: >
+      Assign the correct Emergency Severity Index (ESI 1–5) to each of 10
+      consecutive patients based on vital signs, chief complaint, and history.
+    difficulty: easy
+    max_steps: 10
+    action_type: triage
+
+  - id: task_2
+    name: "Diagnostic Workup Planning"
+    description: >
+      For each of 5 complex presentations, order the appropriate set of
+      diagnostic tests.  Scored on must-order coverage, useful optional
+      tests, and avoidance of unnecessary or wasteful orders.
+    difficulty: medium
+    max_steps: 5
+    action_type: order_diagnostics
+
+  - id: task_3
+    name: "Mass-Casualty Surge Management"
+    description: >
+      Simultaneously triage and allocate beds for 20 patients arriving during
+      a mass-casualty incident.  Resources are limited (3 trauma bays, 5 CCU,
+      10 acute, 15 general beds).  High-acuity patients must receive
+      appropriate beds before resources are exhausted.
+    difficulty: hard
+    max_steps: 20
+    action_type: allocate_resources
+
+observation:
+  type: object
+  description: >
+    Patient presentation object including: chief complaint, vital signs
+    (BP, HR, RR, SpO2, temperature, GCS, pain score), age, sex, symptom
+    duration, medical history, medications, allergies, and arrival mode.
+    Task 3 additionally includes the current department status (bed utilisation)
+    and remaining patient queue.
+  fields:
+    - task_id: string
+    - episode_id: string
+    - step: integer
+    - max_steps: integer
+    - current_patient: Patient
+    - patient_queue: "list[Patient] (Task 3 only)"
+    - department_status: "DepartmentStatus (Task 3 only)"
+    - instructions: string
+    - valid_action_types: list[string]
+    - action_schema: object
+
+action:
+  type: object
+  description: >
+    Clinical decision action.  Three sub-types depending on the active task:
+    triage (assign ESI level), order_diagnostics (select test panel),
+    allocate_resources (ESI + bed assignment).
+  fields:
+    - action_type: "string — one of: triage | order_diagnostics | allocate_resources"
+    - patient_id: string
+    - esi_level: "integer 1–5 (tasks 1 and 3)"
+    - diagnostics: "list[string] (task 2)"
+    - bed_type: "string (task 3) — trauma_bay | ccu | acute | general | waiting"
+    - rationale: "string (optional but rewarded)"
+
+reward:
+  type: float
+  min: 0.0
+  max: 1.0
+  description: >
+    Step-level score in [0.0, 1.0] reflecting clinical accuracy and safety.
+    Partial progress signal at every step — never binary.
+    Episode score = mean of all step scores.
+  partial_scores:
+    accuracy:        "ESI classification accuracy (Tasks 1 & 3)"
+    appropriateness: "Diagnostic or bed appropriateness (Tasks 2 & 3)"
+    efficiency:      "Resource utilisation efficiency (Task 3)"
+    safety:          "Safety penalty for under-triaging critical patients"
+
+endpoints:
+  reset: "POST /reset?task_id={task_id}"
+  step:  "POST /step"
+  state: "GET  /state"
+  tasks: "GET  /tasks"
+  baseline: "POST /baseline"
+  grader:   "POST /grader"
+
+docker:
+  port: 7860
+  base_image: "python:3.11-slim"
+
+huggingface:
+  sdk: docker
+  app_port: 7860
+  suggested_hardware: cpu-basic
