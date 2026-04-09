@@ -188,6 +188,7 @@ class TaskInfo(BaseModel):
     action_schema:          Dict[str, Any]
     observation_description:str
     scoring_criteria:       str
+    has_grader:             bool = True
     baseline_score:         Optional[float] = None
 
 

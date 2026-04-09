@@ -221,6 +221,7 @@ def list_tasks() -> List[Dict[str, Any]]:
             "valid_action_types": t.valid_action_types,
             "action_schema":    t.action_schema,
             "description":      t.description,
+            "has_grader":       t.has_grader,
         }
         for t in TASK_CONFIGS.values()
     ]

@@ -27,6 +27,7 @@ tasks:
     difficulty: easy
     max_steps: 10
     action_type: triage
+    has_grader: true
 
   - id: task_2
     name: "Diagnostic Workup Planning"
@@ -37,6 +38,7 @@ tasks:
     difficulty: medium
     max_steps: 5
     action_type: order_diagnostics
+    has_grader: true
 
   - id: task_3
     name: "Mass-Casualty Surge Management"
@@ -48,6 +50,7 @@ tasks:
     difficulty: hard
     max_steps: 20
     action_type: allocate_resources
+    has_grader: true
 
 observation:
   type: object
