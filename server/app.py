@@ -248,9 +248,9 @@ def example_action(task_id: str = Query(default="task_1")) -> Dict[str, Any]:
 # Entry point
 # ──────────────────────────────────────────────────────────────────────────────
 
-def start() -> None:
+def main() -> None:
     port = int(os.environ.get("PORT", 7860))
     uvicorn.run("server.app:app", host="0.0.0.0", port=port, reload=False)
 
-if __name__ == "__main__":
-    start()
+if __name__ == '__main__':
+    main()
