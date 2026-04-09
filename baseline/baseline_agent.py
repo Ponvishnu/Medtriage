@@ -7,13 +7,13 @@ Two agents are provided:
    Uses structured clinical heuristics derived from ESI v4.
    Produces reproducible reference scores on every run.
 
-2. LLMAgent — uses Google Gemini API (reads GEMINI_API_KEY from environment).
-   Sends full patient data + ESI guidelines to gemini-2.5-flash.
+2. LLMAgent — uses OpenAI Client (reads HF_TOKEN or API_KEY from environment).
+   Sends full patient data + ESI guidelines to the specified model via OpenAI-compatible endpoint.
    Demonstrates how an LLM-powered agent interacts with the environment.
 
 Usage:
   python baseline/run_baseline.py                      # RuleBasedAgent only
-  GEMINI_API_KEY=AIza... python baseline/run_baseline.py --llm   # + LLMAgent
+  HF_TOKEN=hf_... python baseline/run_baseline.py --llm   # + LLMAgent
 """
 
 from __future__ import annotations
@@ -259,7 +259,7 @@ class RuleBasedAgent:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 2. LLM Agent  (Google Gemini API — requires GEMINI_API_KEY)
+# 2. LLM Agent  (OpenAI-Compatible API — requires HF_TOKEN)
 # ══════════════════════════════════════════════════════════════════════════════
 
 SYSTEM_PROMPT = """You are an expert Emergency Department triage clinician with 20 years of
@@ -309,46 +309,52 @@ def _format_patient(p: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-# Default Gemini API key (override via GEMINI_API_KEY environment variable)
-_DEFAULT_GEMINI_API_KEY = "AIzaSyBD7lqTjmgA7gbiJHDUx-PM9nKr5S7JhFA"
-
+# Default API variables (can be overridden via environment variables)
+_DEFAULT_API_BASE_URL = "https://router.huggingface.co/v1"
+_DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-72B-Instruct"
 
 class LLMAgent:
     """
-    Agent powered by the Google Gemini API.
+    Agent powered by an OpenAI-compatible API.
 
-    Reads GEMINI_API_KEY from environment (falls back to built-in key).
-    Uses google-generativeai SDK with gemini-2.5-flash by default.
+    Reads API_BASE_URL, MODEL_NAME, and HF_TOKEN (or API_KEY) from environment.
+    Uses openai>=1.0 SDK with structured JSON output.
     """
 
-    def __init__(self, model: str = "gemini-2.5-flash") -> None:
+    def __init__(self, model: Optional[str] = None) -> None:
         try:
-            from google import genai          # type: ignore
-            from google.genai import types    # type: ignore
+            from openai import OpenAI  # type: ignore
         except ImportError:
-            raise ImportError("Run: pip install google-genai")
+            raise ImportError("Run: pip install openai")
 
-        api_key = os.environ.get("GEMINI_API_KEY", _DEFAULT_GEMINI_API_KEY)
-        self._client = genai.Client(api_key=api_key)
-        self._types  = types
-        self._model  = model
+        api_key = os.environ.get("HF_TOKEN") or os.environ.get("API_KEY")
+        if not api_key:
+            # Fallback to dummy key to avoid instant crash (e.g., local vLLM often ignores key)
+            api_key = "dummy-key"
+
+        base_url = os.environ.get("API_BASE_URL", _DEFAULT_API_BASE_URL)
+        self._model = model or os.environ.get("MODEL_NAME", _DEFAULT_MODEL_NAME)
+        
+        self._client = OpenAI(api_key=api_key, base_url=base_url)
         self._env    = MedTriageEnvironment()
 
     def _call(self, user_message: str) -> str:
-        full_prompt = SYSTEM_PROMPT + "\n\n" + user_message
-        config = self._types.GenerateContentConfig(
-            temperature=0.0,
-            max_output_tokens=512,
-            response_mime_type="application/json",
-        )
         for attempt in range(3):
             try:
-                resp = self._client.models.generate_content(
+                resp = self._client.chat.completions.create(
                     model=self._model,
-                    contents=full_prompt,
-                    config=config,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user",   "content": user_message},
+                    ],
+                    temperature=0.0,
+                    max_tokens=512
                 )
-                return resp.text
+                txt = resp.choices[0].message.content
+                # Very basic cleanup in case model wraps json in markdown
+                if txt:
+                    return txt.replace("```json", "").replace("```", "").strip()
+                return ""
             except Exception as e:
                 if attempt == 2:
                     raise
@@ -439,7 +445,7 @@ class LLMAgent:
             "episode_score": round(episode_score, 4),
             "step_scores":   step_scores,
             "num_steps":     len(step_scores),
-            "agent":         f"LLMAgent(gemini/{self._model})",
+            "agent":         f"LLMAgent(openai/{self._model})",
         }
 
     def run_all_tasks(self) -> Dict[str, Any]:
@@ -454,7 +460,7 @@ class LLMAgent:
             sum(r["episode_score"] for r in results.values()) / len(results), 4
         )
         return {
-            "agent":         f"LLMAgent(gemini/{self._model})",
+            "agent":         f"LLMAgent(openai/{self._model})",
             "task_results":  results,
             "overall_score": overall,
         }

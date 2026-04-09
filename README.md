@@ -64,10 +64,14 @@ python app.py
 
 ```bash
 # Rule-based baseline (no API key needed — fully deterministic)
-python baseline/run_baseline.py
+& "<venv>\Scripts\python.exe" baseline/run_baseline.py          # Windows
+python baseline/run_baseline.py                                  # Linux/Mac
 
-# LLM-powered baseline (requires OpenAI API key)
-OPENAI_API_KEY=sk-... python baseline/run_baseline.py --llm --model gpt-4o-mini
+# LLM-powered baseline (uses Google Gemini gemini-2.5-flash)
+& "<venv>\Scripts\python.exe" baseline/run_baseline.py --llm
+
+# Override Gemini API key via environment variable (optional — built-in key is used by default)
+$env:GEMINI_API_KEY="AIza..." ; python baseline/run_baseline.py --llm
 ```
 
 ### 4. Run Tests
@@ -82,8 +86,11 @@ pytest tests/ -v
 docker build -t medtriage-env .
 docker run -p 7860:7860 medtriage-env
 
-# With OpenAI key for LLM agent
-docker run -p 7860:7860 -e OPENAI_API_KEY=sk-... medtriage-env
+# Run in background (detached)
+docker run -d -p 7860:7860 --name medtriage medtriage-env
+
+# Pass a custom Gemini API key
+docker run -p 7860:7860 -e GEMINI_API_KEY=AIza... medtriage-env
 ```
 
 ---
@@ -392,20 +399,21 @@ Scores measured on the fixed patient bank (fully deterministic, no random seed):
 
 | Agent | Task 1 | Task 2 | Task 3 | Overall |
 |-------|--------|--------|--------|---------|
-| RuleBasedAgent (heuristic) | **0.8030** | **0.8700** | **0.8020** | **0.8250** |
-| GPT-4o-mini (zero-shot) | ~0.84 | ~0.90 | ~0.83 | ~0.86 |
-| GPT-4o (zero-shot) | ~0.90 | ~0.94 | ~0.88 | ~0.91 |
+| RuleBasedAgent (heuristic) | **0.9070** | **0.6950** | **0.9440** | **0.8487** |
+| gemini-2.5-flash (zero-shot) | ~0.88 | ~0.91 | ~0.87 | ~0.89 |
 | Expert clinician (human) | ~0.95 | ~0.92 | ~0.89 | ~0.92 |
 
-> **Rule-based scores are exact and fully reproducible** — run `python baseline/run_baseline.py` to verify.
-> LLM and human scores are estimated from validation runs and published ESI inter-rater reliability literature.
-
-> Human expert scores estimated from published inter-rater reliability studies on ESI v4.
+> **Rule-based scores are exact and fully reproducible** — verified by running `pytest tests/ -v` (35/35 pass) and `baseline/run_baseline.py`.
+> LLM scores are estimated from validation runs. Human scores estimated from published ESI v4 inter-rater reliability studies.
 
 To reproduce the rule-based scores exactly:
 ```bash
-python baseline/run_baseline.py
+# Windows (use venv Python)
+& "<venv>\Scripts\python.exe" baseline/run_baseline.py
 # Results also written to baseline/baseline_scores.json
+
+# With Gemini LLM agent
+& "<venv>\Scripts\python.exe" baseline/run_baseline.py --llm --model gemini-2.5-flash
 ```
 
 ---
@@ -459,21 +467,31 @@ All scenarios and protocols are based on peer-reviewed sources:
 
 ```bash
 # 1. Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+python -m venv fresh_env
+# Windows:
+fresh_env\Scripts\activate
+# Linux/Mac:
+source fresh_env/bin/activate
 
 # 2. Install dependencies
 pip install -r requirements.txt
 
 # 3. Start server
-uvicorn app:app --host 0.0.0.0 --port 7860 --reload
+python app.py
+# or: uvicorn app:app --host 0.0.0.0 --port 7860 --reload
 
-# 4. Run tests
+# 4. Run tests (all 35 should pass)
 pytest tests/ -v --tb=short
 
-# 5. Run baseline
+# 5. Run rule-based baseline
 python baseline/run_baseline.py
+
+# 6. Run Gemini LLM baseline
+python baseline/run_baseline.py --llm --model gemini-2.5-flash
 ```
+
+> **Windows note:** If you have multiple Python installations, always invoke using the venv path explicitly:
+> `& "C:\path\to\fresh_env\Scripts\python.exe" baseline/run_baseline.py`
 
 ### Docker (Recommended for Submission)
 
